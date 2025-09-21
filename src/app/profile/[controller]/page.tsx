@@ -3,10 +3,11 @@ import React, { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { FiUserPlus } from "react-icons/fi";
 import { getUserByBcAdress, getUserById, getUserByUsername } from "@/app/ceramic/userService";
-import { isFriend, sendFriendRequest } from "@/app/ceramic/relationService";
+import { checkFriendRequest, isFriend, sendFriendRequest } from "@/app/ceramic/relationService";
 import { isStreamId } from "@/app/ceramic/orbisDB";
 import { a } from "framer-motion/client";
 import { reportObject } from "@/app/ceramic/reportService";
+import { toast, Toaster } from "react-hot-toast";
 
 interface Profile {
   stream_id: string;
@@ -59,6 +60,7 @@ const OtherProfilePage = () => {
         const me = localStorage.getItem("orbis:user");
         const myStreamId = me ? JSON.parse(me).stream_id : null;
         const ok = await isFriend(profile.stream_id) || profile.stream_id == myStreamId;
+        const alreadySent = await checkFriendRequest(profile.stream_id);
         setCanAdd(!ok);
       } catch {
         setCanAdd(false);
@@ -66,13 +68,15 @@ const OtherProfilePage = () => {
     })();
   }, [profile]);
 
-  const handleAddContact = async () => {
+ const handleAddContact = async () => {
     if (!profile) return;
     try {
       await sendFriendRequest(profile.stream_id);
-      console.log("Petición de amistad enviada a", profile.stream_id);
+      toast.success('¡Petición de amistad enviada!');  // ← notificación chula
+      setCanAdd(false);
     } catch (err) {
       console.error("Error enviando petición de amistad:", err);
+      toast.error('Error enviando petición');
     }
   };
 
@@ -95,7 +99,10 @@ const OtherProfilePage = () => {
   if (!profile) return null;
 
   return (
+    <>
+      <Toaster position="top-right" />
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center p-4">
+
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-md">
         <div className="flex flex-col items-center">
           <div className="w-32 h-32 bg-gray-200 dark:bg-gray-700 rounded-full mb-4 overflow-hidden">
@@ -174,9 +181,7 @@ const OtherProfilePage = () => {
         </div>
       </div>
     </div>
-
-
-    
+    </>
   );
 };
 

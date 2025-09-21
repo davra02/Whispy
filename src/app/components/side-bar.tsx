@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { FiUserPlus } from "react-icons/fi";  // añade este import
 import ThemeToggle from "./ThemeToggle";
 import { createChat, getChatMembers, retrieveMyChats } from "../ceramic/chatService";
-import { acceptFriendRequest, retrieveContacts, retrieveFriendRequests, sendFriendRequest } from "../ceramic/relationService";
+import { acceptFriendRequest, countFriendRequests, retrieveContacts, retrieveFriendRequests, sendFriendRequest } from "../ceramic/relationService";
 import { createCommunity, retrieveMyCommunities, searchCommunities } from "../ceramic/communityService";
 
 
@@ -44,6 +44,8 @@ const SideBar: React.FC<SideBarProps> = ({ selectedChatId, onSelectChat }) => { 
   const [isExploreOpen, setIsExploreOpen] = useState(false);
   const [exploreTerm, setExploreTerm] = useState("");
   const [exploreResults, setExploreResults] = useState<any[]>([]);
+  const [pendingCount, setPendingCount] = useState<number>(0);
+  const [membersChat, setMembersChat] = useState("");
 
 
   const router = useRouter();
@@ -65,15 +67,31 @@ const SideBar: React.FC<SideBarProps> = ({ selectedChatId, onSelectChat }) => { 
     router.push("/login"); // Redirigir a login después de cerrar sesión
   };
 
-  const openMembersModal = async (chatId: string) => {
+  const openMembersModal = async (chatId: string, title: string) => {
     try {
       const members:any = await getChatMembers(chatId);
+      setMembersChat(title);
       setChatMembers(members);
       setShowMembersFor(chatId);
     } catch (e) {
       console.error("Error cargando miembros de chat:", e);
     }
   };
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const count = await countFriendRequests();
+        setPendingCount(count);
+      } catch (e) {
+        console.error("Error contando solicitudes:", e);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    setPendingCount(pendingRequests.length);
+  }, [pendingRequests]);
 
   // Obtener chats cuando se selecciona la sección "chats"
   useEffect(() => {
@@ -272,17 +290,19 @@ const openCommunityPopup = () => {
                   ${collapsed ? "w-16" : "w-64"}`}
     >
       {/* Toggle button */}
+      <div className="flex justify-end bg-gray-300 dark:bg-gray-800">
       <button
         onClick={() => setCollapsed(c => !c)}
         className="m-2 p-2 rounded hover:bg-gray-300 dark:hover:bg-gray-700 transition self-end"
       >
         {collapsed ? <FiChevronRight /> : <FiChevronLeft />}
       </button>
+      </div>
     {/* Contenido superior: Menú y secciones */}
     {!collapsed && (
         <>
     <div className="flex-grow">
-      <div className="p-4 bg-gray-300 dark:bg-gray-700 flex items-center">
+      <div className="flex items-center">
         {activeSection !== "main" && (
           <button
             onClick={handleBack}
@@ -314,12 +334,19 @@ const openCommunityPopup = () => {
         {activeSection === "main" && (
           <div className="space-y-4">
             <div className="flex">
-              <button
-                onClick={handleContactsClick}
-                className="flex-grow p-3 bg-blue-500 text-white rounded-l-lg hover:bg-blue-600 transition"
-              >
-                Contactos
-              </button>
+             <div className="relative flex-grow">
+                  <button
+                    onClick={handleContactsClick}
+                    className="w-full p-3 bg-blue-500 text-white rounded-l-lg hover:bg-blue-600 transition"
+                  >
+                    Contactos
+                  </button>
+                  {pendingCount > 0 && (
+                    <span className="absolute -top-1 -left-1 bg-red-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full">
+                      {pendingCount}
+                    </span>
+                  )}
+                </div>
               <button
                 onClick={() => setIsAddContactOpen(true)}
                 className="p-3 bg-blue-500 text-white rounded-r-lg hover:bg-blue-600 transition"
@@ -507,7 +534,7 @@ const openCommunityPopup = () => {
             chatMenuOpenFor === chat.stream_id ? null : chat.stream_id
           )
         }
-        className={`px-3 py-3 rounded-r-lg flex items-center justify-center transition ${
+        className={`px-3 py-3 pb-4 rounded-r-lg flex items-center justify-center transition ${
           isSelected
             ? "bg-indigo-500 text-white"
             : "bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600"
@@ -516,13 +543,13 @@ const openCommunityPopup = () => {
         <FiMoreVertical className="text-xl" />
       </button>
                   {chatMenuOpenFor === chat.stream_id && (
-                    <div className="absolute right-0 mt-10 w-36 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-lg z-50">
+                    <div className="absolute right-0 top-0 w-36 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-lg z-50">
                       <button
                         onClick={() => {
-                          openMembersModal(chat.stream_id);
+                          openMembersModal(chat.stream_id, chat.title);
                           setChatMenuOpenFor(null);
                         }}
-                        className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+                        className="w-full text-left px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
                       >
                         Ver miembros
                       </button>
@@ -546,7 +573,7 @@ const openCommunityPopup = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 p-6 rounded-lg shadow-lg w-80 max-h-[80vh] overflow-auto">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold">Miembros del chat</h3>
+              <h3 className="text-lg font-bold">Miembros de {membersChat}</h3>
               <button onClick={() => setShowMembersFor(null)}>
                 <FiX />
               </button>

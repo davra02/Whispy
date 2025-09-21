@@ -180,3 +180,34 @@ export const isFriend = async (otherStreamId: string): Promise<boolean> => {
     return isFriend;
   }
   
+export const isFriendRequestSent = async (otherStreamId: string): Promise<boolean> => {
+    // 1. Obtén tu stream_id de usuario
+    const stored = localStorage.getItem("orbis:user")
+    const myStreamId = stored ? JSON.parse(stored).stream_id : null
+    if (!myStreamId) {
+      console.warn("No hay usuario en localStorage")
+      return false
+    }
+
+    const { rows } = await db
+      .select()
+      .from(models.friend_event)
+      .where({
+        requester: myStreamId,
+        userPeer: otherStreamId,
+        type: "REQUEST"
+      })
+      .context(contexts.whispy_test)
+      .run()
+
+    return rows.length > 0;
+}
+
+export const checkFriendRequest = async (otherStreamId: string) => {
+  return await isFriendRequestSent(otherStreamId) && !await isFriend(otherStreamId);
+}
+
+export const countFriendRequests = async (): Promise<number> => {
+  const requests = await retrieveFriendRequests();
+  return requests.length;
+}
