@@ -17,6 +17,7 @@ const ChatApp = () => {
   const [user, setUser] = useState<string | null>(null);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [shouldScrollToBottom, setShouldScrollToBottom] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -34,21 +35,26 @@ const ChatApp = () => {
     }
     let isMounted = true;
 
+    setShouldScrollToBottom(true);
+
     const fetchMessages = async () => {
       try {
-        // Pasa la clave privada y el streamId actual
         const msgs = await retrieveMessages(selectedChatId, user, privateKey);
         if (!isMounted) return;
-        setChatMessages(
-          msgs.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-        );
+        
+        const sortedMsgs = msgs.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        setChatMessages(sortedMsgs);
+        // NO hacer scroll automático en fetch periódico
+        setShouldScrollToBottom(false);
       } catch (e) {
         console.error("Error loading messages:", e);
       }
     };
 
     fetchMessages();
-    // refrescar cada 3 segundos
+    // Hacer scroll inicial cuando se selecciona un chat
+    setShouldScrollToBottom(false);
+
     const intervalId = setInterval(fetchMessages, 3000);
 
     return () => {
@@ -58,21 +64,22 @@ const ChatApp = () => {
   }, [selectedChatId, privateKey, user]);
 
   const handleSend = async (rawMessage: string) => {
-  if (!selectedChatId || !user || !privateKey) return;
+    if (!selectedChatId || !user || !privateKey) return;
 
-  try {
-    const { msgType, content } = JSON.parse(rawMessage);
-    await sendMessage(content, selectedChatId, user, privateKey, msgType);
-    
-    // Recargar mensajes
-    const msgs = await retrieveMessages(selectedChatId, user, privateKey);
-    setChatMessages(
-      msgs.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    );
-  } catch (err) {
-    console.error("Error enviando mensaje:", err);
-  }
-};
+    try {
+      const { msgType, content } = JSON.parse(rawMessage);
+      await sendMessage(content, selectedChatId, user, privateKey, msgType);
+      
+      // Recargar mensajes Y hacer scroll al enviar
+      const msgs = await retrieveMessages(selectedChatId, user, privateKey);
+      setChatMessages(
+        msgs.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      );
+      setShouldScrollToBottom(true); // SÍ hacer scroll al enviar mensaje
+    } catch (err) {
+      console.error("Error enviando mensaje:", err);
+    }
+  };
 
   if (!user || !privateKey) return null;
 
@@ -85,11 +92,14 @@ const ChatApp = () => {
           onSelectChat={(chatId: string) => setSelectedChatId(chatId)}
         />
 
-        {/* Contenedor principal */}
         <div className="flex flex-col flex-1">
           {selectedChatId ? (
             <>
-              <ChatList messages={chatMessages} />
+              <ChatList 
+                messages={chatMessages} 
+                shouldScrollToBottom={shouldScrollToBottom}
+                onScrollComplete={() => setShouldScrollToBottom(false)}
+              />
               <ChatInput
                 onSendMessage={handleSend}
                 disabled={!selectedChatId}

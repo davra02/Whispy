@@ -2,13 +2,17 @@
   "name": "whispy-client",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
+
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
     "dev2": "next dev",
     "lint": "next lint",
-    "test": "jest"
+    "test": "jest",
+    "migrate:models": "node --experimental-modules src/scripts/migrate-models.js",
+    "migrate:models:prod": "NODE_ENV=production tsx scripts/migrate-models.ts"
   },
   "dependencies": {
     "@ethersproject/providers": "^5.8.0",

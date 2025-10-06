@@ -14,9 +14,16 @@ export function useAuthRedirect(requirePrivateKey = false, sessionContext?: { is
 
   useEffect(() => {
     const checkAuth = async () => {
+      const migrationDone = localStorage.getItem("orbis:migrationDone");
       const session = localStorage.getItem("orbis:session");
       const orbisUser = localStorage.getItem("orbis:user");
       const encryptedPrivateKey = localStorage.getItem("orbis:key");
+
+      if(!migrationDone) {
+        router.push("/migration");
+        return;
+      }
+
       if (!session) {
         router.push("/metalogin");
         return;

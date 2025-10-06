@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { FiUser } from "react-icons/fi";
 
 interface Profile {
   stream_id: string;
@@ -30,12 +31,16 @@ const ProfilePage = () => {
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center p-4">
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-md">
         <div className="flex flex-col items-center">
-          <div className="w-32 h-32 bg-gray-200 dark:bg-gray-700 rounded-full mb-4 overflow-hidden">
-            <img
-              src={profile.profilePicture || "/default-avatar.png"}
-              alt="Avatar"
-              className="w-full h-full object-cover"
-            />
+          <div className="w-32 h-32 bg-gray-200 dark:bg-gray-700 rounded-full mb-4 overflow-hidden flex items-center justify-center">
+            {profile.profilePicture ? (
+              <img
+                src={profile.profilePicture}
+                alt="Avatar"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <FiUser className="w-16 h-16 text-gray-500 dark:text-gray-400" />
+            )}
           </div>
           <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-200">
             {profile.username}

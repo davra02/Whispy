@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { FiUserPlus } from "react-icons/fi";  // añade este import
 import ThemeToggle from "./ThemeToggle";
 import { createChat, getChatMembers, retrieveMyChats } from "../ceramic/chatService";
-import { acceptFriendRequest, countFriendRequests, retrieveContacts, retrieveFriendRequests, sendFriendRequest } from "../ceramic/relationService";
+import { acceptFriendRequest, countFriendRequests, deleteContact, retrieveContacts, retrieveFriendRequests, sendFriendRequest } from "../ceramic/relationService";
 import { createCommunity, retrieveMyCommunities, searchCommunities } from "../ceramic/communityService";
 
 
@@ -46,6 +46,8 @@ const SideBar: React.FC<SideBarProps> = ({ selectedChatId, onSelectChat }) => { 
   const [exploreResults, setExploreResults] = useState<any[]>([]);
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [membersChat, setMembersChat] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [contactToDelete, setContactToDelete] = useState<string>("");
 
 
   const router = useRouter();
@@ -59,12 +61,27 @@ const SideBar: React.FC<SideBarProps> = ({ selectedChatId, onSelectChat }) => { 
     exit: { x: "100%", opacity: 0 },
   };
 
-  // Función para cerrar sesión
-  const handleLogout = () => {
-    localStorage.removeItem("orbis:session");
-    localStorage.removeItem("orbis:user");
-    setIsSettingsOpen(false);
-    router.push("/login"); // Redirigir a login después de cerrar sesión
+  // // Función para cerrar sesión
+  // const handleLogout = () => {
+  //   localStorage.removeItem("orbis:session");
+  //   localStorage.removeItem("orbis:user");
+  //   setIsSettingsOpen(false);
+  //   router.push("/login"); // Redirigir a login después de cerrar sesión
+  // };
+
+  const handleDeleteContact = async (contactId: string) => {
+    try {
+      await deleteContact(contactId);
+      console.log("Contacto eliminado:", contactId);
+      setConfirmDeleteId(null); // Cerrar modal
+    } catch (error) {
+      console.error("Error eliminando contacto:", error);
+    }
+  };
+
+  const openDeleteConfirmation = (contactId: string, contactName: string) => {
+    setConfirmDeleteId(contactId);
+    setContactToDelete(contactName);
   };
 
   const openMembersModal = async (chatId: string, title: string) => {
@@ -403,22 +420,67 @@ const openCommunityPopup = () => {
           )}
 
     {activeSection === "contacts" && (
-      <>
+        <>
           <ul className="space-y-2">
-      {contacts.length > 0 ? (
-        contacts.map((c) => (
-          <li
-            key={c.stream_id}
-            onClick={() => router.push(`/profile/${c.stream_id}`)}
-            className="p-3 bg-gray-300 dark:bg-gray-700 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-600 transition cursor-pointer"
+            {contacts.length > 0 ? (
+              contacts.map((c) => (
+                <li
+                  key={c.stream_id}
+                  className="flex items-center bg-gray-300 dark:bg-gray-700 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-600 transition"
+                >
+                  <div
+                    onClick={() => router.push(`/profile/${c.stream_id}`)}
+                    className="flex-1 p-3 cursor-pointer"
+                  >
+                    {c.username || c.controller}
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openDeleteConfirmation(c.stream_id, c.username || c.controller);
+                    }}
+                    className="p-3 text-red-500 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900 rounded-r-lg transition"
+                    style={{ paddingTop: '15px', paddingBottom: '15px' }}
+                  >
+                    <FiX className="text-lg" />
+                  </button>
+                </li>
+              ))
+            ) : (
+              <p>No hay contactos.</p>
+            )}
+          </ul>
+          {/* Modal de confirmación para eliminar contacto */}
+      {confirmDeleteId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.8, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 p-6 rounded-lg shadow-lg w-80"
           >
-            {c.username || c.controller}
-          </li>
-        ))
-      ) : (
-        <p>No hay contactos.</p>
+            <h3 className="text-lg font-bold mb-4">Confirmar eliminación</h3>
+            <p className="mb-6">
+              ¿Estás seguro de que quieres eliminar a <strong>{contactToDelete}</strong> de tus contactos?
+            </p>
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={() => setConfirmDeleteId(null)}
+                className="px-4 py-2 bg-gray-300 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded hover:bg-gray-400 dark:hover:bg-gray-600 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleDeleteContact(confirmDeleteId)}
+                className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition"
+              >
+                Eliminar
+              </button>
+            </div>
+          </motion.div>
+        </div>
       )}
-    </ul>
 
         {/* BANDA DE PENDING */}
         <div

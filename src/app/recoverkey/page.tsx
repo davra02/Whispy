@@ -81,6 +81,15 @@ export default function RecoverKeyPage() {
     }
   };
 
+  // Nueva función para limpiar localStorage y recargar
+  const handleCreateNewAccount = () => {
+    // Limpiar todo el localStorage
+    localStorage.clear();
+    
+    // Recargar la página
+    router.push("/");
+  };
+
   return (
     <main className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
       <div className="bg-white dark:bg-gray-800 p-8 rounded-xl shadow-lg w-full max-w-md flex flex-col gap-4 items-center">
@@ -125,14 +134,27 @@ export default function RecoverKeyPage() {
             />
             <button
               onClick={handleSave}
-              className="bg-blue-600 text-white px-6 py-2 rounded font-semibold hover:bg-blue-700"
+              className="bg-blue-600 text-white px-6 py-2 rounded font-semibold hover:bg-blue-700 mb-2"
             >
               Guardar clave y continuar
             </button>
           </>
         )}
 
-        {error && <div className="text-red-500 text-center">{error}</div>}
+        {error && <div className="text-red-500 text-center mb-4">{error}</div>}
+
+        {/* Botón para crear nueva cuenta */}
+        <div className="border-t pt-4 w-full">
+          <p className="text-gray-600 dark:text-gray-400 text-sm text-center mb-2">
+            ¿No tienes una clave privada guardada?
+          </p>
+          <button
+            onClick={handleCreateNewAccount}
+            className="w-full bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded font-semibold transition-colors"
+          >
+            Reintentar inicio de sesión con Metamask
+          </button>
+        </div>
       </div>
     </main>
   );

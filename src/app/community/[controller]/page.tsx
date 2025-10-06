@@ -96,33 +96,43 @@ const CommunityPage: React.FC = () => {
   return (
     <div className="relative min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Banner */}
-      <div
-        className={`fixed top-0 left-0 right-0 bg-white dark:bg-gray-800 shadow-md transition-transform duration-300 z-10 ${
-          showBanner ? "translate-y-0" : "-translate-y-full"
+<div
+  className={`fixed top-0 left-0 right-0 bg-white dark:bg-gray-800 shadow-md transition-transform duration-300 z-10 ${
+    showBanner ? "translate-y-0" : "-translate-y-full"
+  }`}
+>
+  <div className="flex items-center justify-between p-4">
+    <button
+      onClick={() => router.push("/")}
+      className="p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition"
+    >
+      <FiArrowLeft className="text-xl" />
+    </button>
+    
+    {/* Contenedor central con título y descripción */}
+    <div className="flex-1 text-center px-4">
+      <h1 className="text-lg font-bold truncate">
+        {community?.name || "Cargando..."}
+      </h1>
+      {community?.description && (
+        <p className="text-sm text-gray-600 dark:text-gray-400 truncate mt-1">
+          {community.description}
+        </p>
+      )}
+    </div>
+    
+    <button
+      onClick={handleToggleJoin}
+      className={`px-4 py-2 rounded-lg transition flex-shrink-0
+        ${joined 
+          ? "bg-red-500 hover:bg-red-600 text-white" 
+          : "bg-blue-500 hover:bg-blue-600 text-white"
         }`}
-      >
-        <div className="flex items-center justify-between p-4">
-          <button
-            onClick={() => router.push("/")}
-            className="p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition"
-          >
-            <FiArrowLeft className="text-xl" />
-          </button>
-          <h1 className="flex-1 text-center text-lg font-bold truncate">
-            {community?.name || "Cargando..."}
-          </h1>
-          <button
-            onClick={handleToggleJoin}              // ← usamos el toggle
-            className={`px-4 py-2 rounded-lg transition 
-              ${joined 
-                ? "bg-red-500 hover:bg-red-600 text-white" 
-                : "bg-blue-500 hover:bg-blue-600 text-white"
-              }`}
-          >
-            {joined ? "Salir" : "Unirme"}       
-          </button>
-        </div>
-      </div>
+    >
+      {joined ? "Salir" : "Unirme"}       
+    </button>
+  </div>
+</div>
 
       {/* Posts */}
       <div className="pt-20 px-4 space-y-4 pb-32">

@@ -306,7 +306,7 @@
             "EventType": {
                 "type": "string",
                 "title": "EventType",
-                "enum": ["REQUEST", "ACCEPT", "REJECT", "BLOCK", "UNBLOCK"]
+                "enum": ["REQUEST", "ACCEPT", "REJECT", "BLOCK", "UNBLOCK", "DELETE"]
             }
             },
             "properties": {
@@ -399,7 +399,7 @@
                 "publicKey": { "type": "string" }
             },
             "required": ["username", "isPrivate", "publicKey"],
-            "additionalProperties": true
+            "additionalProperties": false
         }
     }
 

@@ -86,28 +86,64 @@ export const retrieveFriendRequests = async (): Promise<
         ON u."stream_id" = r."requester"
       WHERE r."userPeer" = $1
         AND r."type" = 'REQUEST'
-        -- No esté ya aceptada
-        AND NOT EXISTS (
-          SELECT 1
-          FROM "${friendEventModel}" AS a
-          WHERE a."type"      = 'ACCEPT'
-            AND a."eventPeer" = r."stream_id"
-        )
         -- No haya un REJECT más reciente
         AND NOT EXISTS (
           SELECT 1
           FROM "${friendEventModel}" AS rej
-          WHERE rej."type"      = 'REJECT'
+          WHERE rej."type" = 'REJECT'
             AND rej."eventPeer" = r."stream_id"
-            AND rej."lastMod"   > r."lastMod"
+            AND rej."lastMod" > r."lastMod"
         )
-        -- No esté bloqueada por mí
+        -- No esté bloqueado por MÍ
         AND NOT EXISTS (
           SELECT 1
-          FROM "${friendEventModel}" AS b
-          WHERE b."type"       = 'BLOCK'
-            AND b."requester"  = $1
-            AND b."userPeer"   = r."requester"
+          FROM "${friendEventModel}" AS b1
+          WHERE b1."type" = 'BLOCK'
+            AND b1."requester" = $1
+            AND b1."userPeer" = r."requester"
+        )
+        -- No esté bloqueado por EL OTRO USUARIO
+        AND NOT EXISTS (
+          SELECT 1
+          FROM "${friendEventModel}" AS b2
+          WHERE b2."type" = 'BLOCK'
+            AND b2."requester" = r."requester"
+            AND b2."userPeer" = $1
+        )
+        -- Lógica de aceptación: Solo excluir si está aceptada Y no hay DELETE más reciente
+        AND NOT EXISTS (
+          SELECT 1
+          FROM "${friendEventModel}" AS acc
+          WHERE acc."type" = 'ACCEPT'
+            AND acc."eventPeer" = r."stream_id"
+            -- Y no existe un DELETE más reciente que la aceptación
+            AND NOT EXISTS (
+              SELECT 1
+              FROM "${friendEventModel}" AS del
+              WHERE del."type" = 'DELETE'
+                AND del."lastMod" > acc."lastMod"
+                AND (
+                  -- DELETE por parte del solicitante
+                  (del."requester" = r."requester" AND del."userPeer" = $1)
+                  OR
+                  -- DELETE por parte mía
+                  (del."requester" = $1 AND del."userPeer" = r."requester")
+                )
+            )
+        )
+        -- No haya un DELETE más reciente que anule directamente la solicitud
+        AND NOT EXISTS (
+          SELECT 1
+          FROM "${friendEventModel}" AS del
+          WHERE del."type" = 'DELETE'
+            AND del."lastMod" > r."lastMod"
+            AND (
+              -- DELETE por parte del solicitante (quien envió el REQUEST)
+              (del."requester" = r."requester" AND del."userPeer" = $1)
+              OR
+              -- DELETE por parte mía (quien recibe el REQUEST)
+              (del."requester" = $1 AND del."userPeer" = r."requester")
+            )
         )
       ORDER BY r."requester", r."lastMod" DESC;
       `,
@@ -158,6 +194,20 @@ export const retrieveContacts = async () => {
         WHERE req."type" = 'REQUEST'
           AND (req."requester" = $1 OR req."userPeer" = $1)
           AND u."stream_id" <> $1
+          -- Excluir si existe un DELETE más reciente que la aceptación
+          AND NOT EXISTS (
+            SELECT 1
+            FROM "${friendEventModel}" AS del
+            WHERE del."type" = 'DELETE'
+              AND del."lastMod" > acc."lastMod"
+              AND (
+                -- DELETE por parte del usuario actual
+                (del."requester" = $1 AND del."userPeer" = u."stream_id")
+                OR
+                -- DELETE por parte del otro usuario
+                (del."requester" = u."stream_id" AND del."userPeer" = $1)
+              )
+          )
         ORDER BY u."stream_id", acc."lastMod" DESC;
         `,
         [userId]
@@ -189,19 +239,73 @@ export const isFriendRequestSent = async (otherStreamId: string): Promise<boolea
       return false
     }
 
+    const friendEventModel = models.friend_event
+
     const { rows } = await db
       .select()
-      .from(models.friend_event)
-      .where({
-        requester: myStreamId,
-        userPeer: otherStreamId,
-        type: "REQUEST"
-      })
       .context(contexts.whispy_test)
+      .raw(
+        `
+        SELECT r."stream_id"
+        FROM "${friendEventModel}" AS r
+        WHERE r."requester" = $1
+          AND r."userPeer" = $2
+          AND r."type" = 'REQUEST'
+          -- No ha sido aceptada
+          AND NOT EXISTS (
+            SELECT 1
+            FROM "${friendEventModel}" AS acc
+            WHERE acc."type" = 'ACCEPT'
+              AND acc."eventPeer" = r."stream_id"
+          )
+          -- No ha sido rechazada después del request
+          AND NOT EXISTS (
+            SELECT 1
+            FROM "${friendEventModel}" AS rej
+            WHERE rej."type" = 'REJECT'
+              AND rej."eventPeer" = r."stream_id"
+              AND rej."lastMod" > r."lastMod"
+          )
+          -- No ha sido eliminada después del request
+          AND NOT EXISTS (
+            SELECT 1
+            FROM "${friendEventModel}" AS del
+            WHERE del."type" = 'DELETE'
+              AND del."lastMod" > r."lastMod"
+              AND (
+                -- DELETE por parte del usuario actual
+                (del."requester" = $1 AND del."userPeer" = $2)
+                OR
+                -- DELETE por parte del otro usuario
+                (del."requester" = $2 AND del."userPeer" = $1)
+              )
+          )
+        LIMIT 1;
+        `,
+        [myStreamId, otherStreamId]
+      )
       .run()
 
     return rows.length > 0;
 }
+
+export const deleteContact = async (otherStreamId: string) => {
+    await db.getConnectedUser();
+    const me = localStorage.getItem("orbis:user") ? JSON.parse(localStorage.getItem("orbis:user")!)["stream_id"] : null;
+    const now = new Date();
+    const friendEvent = {
+        requester: me,
+        userPeer: otherStreamId,
+        type: "DELETE",
+        lastMod: now.toISOString()
+    };
+
+    const insertedFriendEvent = await db.insert(models.friend_event)
+        .value(friendEvent)
+        .context(contexts.whispy_test)
+        .run();
+    console.log("Contact deleted successfully:", insertedFriendEvent);
+} 
 
 export const checkFriendRequest = async (otherStreamId: string) => {
   return await isFriendRequestSent(otherStreamId) && !await isFriend(otherStreamId);
