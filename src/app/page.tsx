@@ -89,7 +89,7 @@ const ChatApp = () => {
       <div className="flex flex-1 overflow-hidden">
         <SideBar
           selectedChatId={selectedChatId}
-          onSelectChat={(chatId: string) => setSelectedChatId(chatId)}
+          onSelectChat={(chatId: string | null) => setSelectedChatId(chatId)}
         />
 
         <div className="flex flex-col flex-1">

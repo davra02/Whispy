@@ -4,7 +4,7 @@ import { FiArrowLeft, FiSettings, FiLogOut, FiChevronUp, FiChevronDown, FiCheck,
 import { useRouter } from "next/navigation";
 import { FiUserPlus } from "react-icons/fi";  // añade este import
 import ThemeToggle from "./ThemeToggle";
-import { createChat, getChatMembers, retrieveMyChats } from "../ceramic/chatService";
+import { createChat, getChatMembers, leaveChat, retrieveMyChats } from "../ceramic/chatService";
 import { acceptFriendRequest, countFriendRequests, deleteContact, retrieveContacts, retrieveFriendRequests, sendFriendRequest } from "../ceramic/relationService";
 import { createCommunity, retrieveMyCommunities, searchCommunities } from "../ceramic/communityService";
 
@@ -48,7 +48,8 @@ const SideBar: React.FC<SideBarProps> = ({ selectedChatId, onSelectChat }) => { 
   const [membersChat, setMembersChat] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [contactToDelete, setContactToDelete] = useState<string>("");
-
+  const [confirmLeaveChatId, setConfirmLeaveChatId] = useState<string | null>(null);
+  const [chatToDelete, setChatToDelete] = useState<string>("");
 
   const router = useRouter();
 
@@ -74,6 +75,8 @@ const SideBar: React.FC<SideBarProps> = ({ selectedChatId, onSelectChat }) => { 
       await deleteContact(contactId);
       console.log("Contacto eliminado:", contactId);
       setConfirmDeleteId(null); // Cerrar modal
+      const updatedContacts = await retrieveContacts();
+      setContacts(updatedContacts);
     } catch (error) {
       console.error("Error eliminando contacto:", error);
     }
@@ -82,6 +85,11 @@ const SideBar: React.FC<SideBarProps> = ({ selectedChatId, onSelectChat }) => { 
   const openDeleteConfirmation = (contactId: string, contactName: string) => {
     setConfirmDeleteId(contactId);
     setContactToDelete(contactName);
+  };
+
+  const openLeaveChatModal = (chatId: string, chatTitle: string) => {
+    setConfirmLeaveChatId(chatId);
+    setChatToDelete(chatTitle);
   };
 
   const openMembersModal = async (chatId: string, title: string) => {
@@ -109,6 +117,20 @@ const SideBar: React.FC<SideBarProps> = ({ selectedChatId, onSelectChat }) => { 
   useEffect(() => {
     setPendingCount(pendingRequests.length);
   }, [pendingRequests]);
+
+  // Actualizar pendingRequests cada 5 segundos
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const pending = await retrieveFriendRequests();
+        setPendingRequests(pending);
+      } catch (e) {
+        console.error("Error actualizando solicitudes pendientes:", e);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Obtener chats cuando se selecciona la sección "chats"
   useEffect(() => {
@@ -615,6 +637,14 @@ const openCommunityPopup = () => {
                       >
                         Ver miembros
                       </button>
+                      <button
+                        onClick={() => {
+                          openLeaveChatModal(chat.stream_id, chat.title);
+                        }}
+                        className="w-full text-left px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                      >
+                        Salir del chat
+                      </button>
                     </div>
                   )}
                 </li>
@@ -628,6 +658,51 @@ const openCommunityPopup = () => {
             Crear Chat
           </button>
         </>
+      )}
+      {/* Modal de confirmación para salir del chat */}
+      {confirmLeaveChatId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.8, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 p-6 rounded-lg shadow-lg w-80"
+          >
+            <h3 className="text-lg font-bold mb-4">Confirmar salida</h3>
+            <p className="mb-6">
+              ¿Estás seguro de que quieres salir de <strong>{chatToDelete}</strong>? Ya no tendrás acceso a este chat.
+            </p>
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={() => setConfirmLeaveChatId(null)}
+                className="px-4 py-2 bg-gray-300 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded hover:bg-gray-400 dark:hover:bg-gray-600 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    await leaveChat(confirmLeaveChatId!);
+                    // refrescar lista de chats
+                    const myChats = await retrieveMyChats();
+                    setChats(myChats);
+                    // si el chat que dejamos estaba seleccionado, deseleccionarlo
+                    if (selectedChatId === confirmLeaveChatId) {
+                      onSelectChat("");
+                    }
+                  } catch (e) {
+                    console.error("Error saliendo del chat:", e);
+                  }
+                  setConfirmLeaveChatId(null);
+                }}
+                className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition"
+              >
+                Salir
+              </button>
+            </div>
+          </motion.div>
+        </div>
       )}
 
       {/* Modal de miembros */}

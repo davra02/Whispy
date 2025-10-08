@@ -71,6 +71,7 @@ export const retrieveFriendRequests = async (): Promise<
 
   const userModel = models.user
   const friendEventModel = models.friend_event
+  
 
   const { rows } = await db
     .select()
@@ -101,6 +102,15 @@ export const retrieveFriendRequests = async (): Promise<
           WHERE b1."type" = 'BLOCK'
             AND b1."requester" = $1
             AND b1."userPeer" = r."requester"
+            -- No haya un UNBLOCK más reciente
+            AND NOT EXISTS (
+              SELECT 1
+              FROM "${friendEventModel}" AS unb1
+              WHERE unb1."type" = 'UNBLOCK'
+                AND unb1."requester" = $1
+                AND unb1."userPeer" = r."requester"
+                AND unb1."lastMod" > b1."lastMod"
+            )
         )
         -- No esté bloqueado por EL OTRO USUARIO
         AND NOT EXISTS (
@@ -109,6 +119,15 @@ export const retrieveFriendRequests = async (): Promise<
           WHERE b2."type" = 'BLOCK'
             AND b2."requester" = r."requester"
             AND b2."userPeer" = $1
+            -- No haya un UNBLOCK más reciente
+            AND NOT EXISTS (
+              SELECT 1
+              FROM "${friendEventModel}" AS unb2
+              WHERE unb2."type" = 'UNBLOCK'
+                AND unb2."requester" = r."requester"
+                AND unb2."userPeer" = $1
+                AND unb2."lastMod" > b2."lastMod"
+            )
         )
         -- Lógica de aceptación: Solo excluir si está aceptada Y no hay DELETE más reciente
         AND NOT EXISTS (
@@ -206,6 +225,40 @@ export const retrieveContacts = async () => {
                 OR
                 -- DELETE por parte del otro usuario
                 (del."requester" = u."stream_id" AND del."userPeer" = $1)
+              )
+          )
+          -- No esté bloqueado por MÍ
+          AND NOT EXISTS (
+            SELECT 1
+            FROM "${friendEventModel}" AS b1
+            WHERE b1."type" = 'BLOCK'
+              AND b1."requester" = $1
+              AND b1."userPeer" = u."stream_id"
+              -- No haya un UNBLOCK más reciente
+              AND NOT EXISTS (
+                SELECT 1
+                FROM "${friendEventModel}" AS unb1
+                WHERE unb1."type" = 'UNBLOCK'
+                  AND unb1."requester" = $1
+                  AND unb1."userPeer" = u."stream_id"
+                  AND unb1."lastMod" > b1."lastMod"
+              )
+          )
+          -- No esté bloqueado por EL OTRO USUARIO
+          AND NOT EXISTS (
+            SELECT 1
+            FROM "${friendEventModel}" AS b2
+            WHERE b2."type" = 'BLOCK'
+              AND b2."requester" = u."stream_id"
+              AND b2."userPeer" = $1
+              -- No haya un UNBLOCK más reciente
+              AND NOT EXISTS (
+                SELECT 1
+                FROM "${friendEventModel}" AS unb2
+                WHERE unb2."type" = 'UNBLOCK'
+                  AND unb2."requester" = u."stream_id"
+                  AND unb2."userPeer" = $1
+                  AND unb2."lastMod" > b2."lastMod"
               )
           )
         ORDER BY u."stream_id", acc."lastMod" DESC;
@@ -315,3 +368,78 @@ export const countFriendRequests = async (): Promise<number> => {
   const requests = await retrieveFriendRequests();
   return requests.length;
 }
+
+export const blockUser = async (userPeerStreamId: string) => {
+    await db.getConnectedUser();
+    const now = new Date();
+    const me = localStorage.getItem("orbis:user") ? JSON.parse(localStorage.getItem("orbis:user")!)["stream_id"] : null;
+    const friendEvent = {
+        requester: me,
+        userPeer: userPeerStreamId,
+        type: "BLOCK",
+        lastMod: now.toISOString()
+    };
+
+    const insertedFriendEvent = await db.insert(models.friend_event)
+        .value(friendEvent)
+        .context(contexts.whispy_test)
+        .run();
+    console.log("User blocked successfully:", insertedFriendEvent);
+}
+
+export const unblockUser = async (userId: string) => {
+    await db.getConnectedUser();
+    const now = new Date();
+    const me = localStorage.getItem("orbis:user") ? JSON.parse(localStorage.getItem("orbis:user")!)["stream_id"] : null;
+    const friendEvent = {
+        requester: me,
+        userPeer: userId,
+        type: "UNBLOCK",
+        lastMod: now.toISOString()
+    };
+
+    const insertedFriendEvent = await db.insert(models.friend_event)
+        .value(friendEvent)
+        .context(contexts.whispy_test)
+        .run();
+    console.log("User unblocked successfully:", insertedFriendEvent);
+}
+
+export const isUserBlocked = async (otherStreamId: string): Promise<boolean> => {
+    // 1. Obtén tu stream_id de usuario
+    const stored = localStorage.getItem("orbis:user")
+    const myStreamId = stored ? JSON.parse(stored).stream_id : null
+    if (!myStreamId) {
+      console.warn("No hay usuario en localStorage")
+      return false
+    }
+
+    const friendEventModel = models.friend_event
+
+    const { rows } = await db
+      .select()
+      .context(contexts.whispy_test)
+      .raw(
+        `
+        SELECT r."stream_id"
+        FROM "${friendEventModel}" AS r
+        WHERE r."requester" = $1
+          AND r."userPeer" = $2
+          AND r."type" = 'BLOCK'
+          -- No ha sido desbloqueado después del bloqueo
+          AND NOT EXISTS (
+            SELECT 1
+            FROM "${friendEventModel}" AS unb
+            WHERE unb."type" = 'UNBLOCK'
+              AND unb."lastMod" > r."lastMod"
+              AND unb."requester" = $1
+              AND unb."userPeer" = $2
+          )
+        LIMIT 1;
+        `,
+        [myStreamId, otherStreamId]
+      )
+      .run()
+
+    return rows.length > 0;
+  }

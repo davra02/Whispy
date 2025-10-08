@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { FiUserPlus } from "react-icons/fi";
 import { getUserByBcAdress, getUserById, getUserByUsername } from "@/app/ceramic/userService";
-import { checkFriendRequest, isFriend, sendFriendRequest } from "@/app/ceramic/relationService";
+import { checkFriendRequest, isFriend, sendFriendRequest, blockUser, unblockUser, isUserBlocked } from "@/app/ceramic/relationService";
 import { isStreamId } from "@/app/ceramic/orbisDB";
 import { a } from "framer-motion/client";
 import { reportObject } from "@/app/ceramic/reportService";
@@ -23,6 +23,8 @@ const OtherProfilePage = () => {
   const [canAdd, setCanAdd] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [reportReason, setReportReason] = useState("");
+  const [isBlocking, setIsBlocking] = useState(false);
+  const [blocked, setBlocked] = useState(false);
   const router = useRouter();
 
   // Obtener perfil
@@ -68,15 +70,73 @@ const OtherProfilePage = () => {
     })();
   }, [profile]);
 
+  // Comprobar si el usuario está bloqueado
+  useEffect(() => {
+    if (!profile) return;
+    (async () => {
+      try {
+        const blockedStatus = await isUserBlocked(profile.stream_id);
+        setBlocked(blockedStatus);
+      } catch {
+        setBlocked(false);
+      }
+    })();
+  }, [profile]);
+
  const handleAddContact = async () => {
     if (!profile) return;
     try {
       await sendFriendRequest(profile.stream_id);
-      toast.success('¡Petición de amistad enviada!');  // ← notificación chula
+      toast.success('¡Petición de amistad enviada!');
       setCanAdd(false);
     } catch (err) {
       console.error("Error enviando petición de amistad:", err);
       toast.error('Error enviando petición');
+    }
+  };
+
+  const handleBlockUser = async () => {
+    if (!profile || isBlocking) return;
+    
+    if (blocked) {
+      // Desbloquear
+      const confirmed = window.confirm(
+        `¿Estás seguro de que deseas desbloquear a ${profile.username}?`
+      );
+      
+      if (!confirmed) return;
+      
+      setIsBlocking(true);
+      try {
+        await unblockUser(profile.stream_id);
+        toast.success(`${profile.username} ha sido desbloqueado`);
+        setBlocked(false);
+      } catch (err) {
+        console.error("Error desbloqueando usuario:", err);
+        toast.error('Error al desbloquear usuario');
+      } finally {
+        setIsBlocking(false);
+      }
+    } else {
+      // Bloquear
+      const confirmed = window.confirm(
+        `¿Estás seguro de que deseas bloquear a ${profile.username}?`
+      );
+      
+      if (!confirmed) return;
+      
+      setIsBlocking(true);
+      try {
+        await blockUser(profile.stream_id);
+        toast.success(`${profile.username} ha sido bloqueado`);
+        setBlocked(true);
+        // Redirigir después de bloquear
+        setTimeout(() => router.push("/"), 1500);
+      } catch (err) {
+        console.error("Error bloqueando usuario:", err);
+        toast.error('Error al bloquear usuario');
+        setIsBlocking(false);
+      }
     }
   };
 
@@ -89,10 +149,12 @@ const OtherProfilePage = () => {
     try {
      await reportObject(profile.stream_id, reportReason);
       console.log("Report sent:", profile.stream_id, reportReason);
+      toast.success('Reporte enviado correctamente');
       setIsReportOpen(false);
       setReportReason("");
     } catch (err) {
       console.error("Error reporting user:", err);
+      toast.error('Error al enviar reporte');
     }
   };
 
@@ -137,6 +199,21 @@ const OtherProfilePage = () => {
                 <FiUserPlus className="w-5 h-5" />
               </button>
             )}
+
+            <button
+              onClick={handleBlockUser}
+              disabled={isBlocking}
+              className={`px-4 py-2 text-white rounded-lg transition disabled:bg-gray-400 disabled:cursor-not-allowed ${
+                blocked 
+                  ? 'bg-green-500 hover:bg-green-600' 
+                  : 'bg-orange-500 hover:bg-orange-600'
+              }`}
+            >
+              {isBlocking 
+                ? (blocked ? 'Desbloqueando...' : 'Bloqueando...') 
+                : (blocked ? 'Desbloquear' : 'Bloquear')
+              }
+            </button>
 
             <button
               onClick={handleReportClick}
