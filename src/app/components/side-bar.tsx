@@ -1,20 +1,20 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { FiArrowLeft, FiSettings, FiLogOut, FiChevronUp, FiChevronDown, FiCheck, FiX, FiSlash, FiMoreVertical, FiChevronRight, FiChevronLeft, FiUsers, FiMenu } from "react-icons/fi";
+import { FiArrowLeft, FiSettings, FiLogOut, FiChevronUp, FiChevronDown, FiCheck, FiX, FiSlash, FiMoreVertical, FiChevronRight, FiChevronLeft, FiUsers, FiMenu, FiUserPlus } from "react-icons/fi";
 import { useRouter } from "next/navigation";
-import { FiUserPlus } from "react-icons/fi";  // añade este import
 import ThemeToggle from "./ThemeToggle";
-import { createChat, getChatMembers, leaveChat, retrieveMyChats } from "../ceramic/chatService";
+import { createChat, getChatMembers, leaveChat, retrieveMyChats, addMember, removeMember } from "../ceramic/chatService";
 import { acceptFriendRequest, countFriendRequests, deleteContact, retrieveContacts, retrieveFriendRequests, sendFriendRequest } from "../ceramic/relationService";
 import { createCommunity, retrieveMyCommunities, searchCommunities } from "../ceramic/communityService";
 
 
 interface SideBarProps {
   selectedChatId: string | null;
-  onSelectChat: (chatId: string) => void;
+  onSelectChat: (chatId: string | null) => void;
 }
 
-const SideBar: React.FC<SideBarProps> = ({ selectedChatId, onSelectChat }) => {  const [activeSection, setActiveSection] = useState<
+const SideBar: React.FC<SideBarProps> = ({ selectedChatId, onSelectChat }) => {
+  const [activeSection, setActiveSection] = useState<
     "main" | "contacts" | "chats" | "communities"
   >("main");
 
@@ -22,7 +22,7 @@ const SideBar: React.FC<SideBarProps> = ({ selectedChatId, onSelectChat }) => { 
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [isPendingOpen, setIsPendingOpen] = useState(false);
   const [contacts, setContacts] = useState<any[]>([]);
-  const [newContactId, setNewContactId] = useState(""); // para el modal de añadir contacto
+  const [newContactId, setNewContactId] = useState("");
   const [isAddContactOpen, setIsAddContactOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isCreateChatOpen, setIsCreateChatOpen] = useState(false);
@@ -50,6 +50,10 @@ const SideBar: React.FC<SideBarProps> = ({ selectedChatId, onSelectChat }) => { 
   const [contactToDelete, setContactToDelete] = useState<string>("");
   const [confirmLeaveChatId, setConfirmLeaveChatId] = useState<string | null>(null);
   const [chatToDelete, setChatToDelete] = useState<string>("");
+  const [isAddingMemberToChat, setIsAddingMemberToChat] = useState(false);
+  const [addMemberSearchTerm, setAddMemberSearchTerm] = useState("");
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+  const [confirmRemoveMember, setConfirmRemoveMember] = useState<{ chatId: string; userId: string; username: string } | null>(null);
 
   const router = useRouter();
 
@@ -62,19 +66,11 @@ const SideBar: React.FC<SideBarProps> = ({ selectedChatId, onSelectChat }) => { 
     exit: { x: "100%", opacity: 0 },
   };
 
-  // // Función para cerrar sesión
-  // const handleLogout = () => {
-  //   localStorage.removeItem("orbis:session");
-  //   localStorage.removeItem("orbis:user");
-  //   setIsSettingsOpen(false);
-  //   router.push("/login"); // Redirigir a login después de cerrar sesión
-  // };
-
   const handleDeleteContact = async (contactId: string) => {
     try {
       await deleteContact(contactId);
       console.log("Contacto eliminado:", contactId);
-      setConfirmDeleteId(null); // Cerrar modal
+      setConfirmDeleteId(null);
       const updatedContacts = await retrieveContacts();
       setContacts(updatedContacts);
     } catch (error) {
@@ -98,10 +94,55 @@ const SideBar: React.FC<SideBarProps> = ({ selectedChatId, onSelectChat }) => { 
       setMembersChat(title);
       setChatMembers(members);
       setShowMembersFor(chatId);
+      setCurrentChatId(chatId);
     } catch (e) {
       console.error("Error cargando miembros de chat:", e);
     }
   };
+
+  const openRemoveMemberConfirmation = (chatId: string, userId: string, username: string) => {
+    setConfirmRemoveMember({ chatId, userId, username });
+  };
+
+  const handleRemoveMember = async () => {
+    if (!confirmRemoveMember) return;
+    
+    try {
+      await removeMember(confirmRemoveMember.chatId, confirmRemoveMember.userId);
+      // Recargar miembros
+      const updatedMembers:any = await getChatMembers(confirmRemoveMember.chatId);
+      setChatMembers(updatedMembers);
+      const updatedChats = await retrieveMyChats();
+      setChats(updatedChats);
+      setConfirmRemoveMember(null);
+    } catch (error) {
+      console.error("Error eliminando miembro:", error);
+      setConfirmRemoveMember(null);
+    }
+  };
+
+  const handleAddMemberToExistingChat = async (chatId: string, userId: string) => {
+    try {
+      await addMember(chatId, userId);
+      // Recargar miembros
+      const updatedMembers:any = await getChatMembers(chatId);
+      setChatMembers(updatedMembers);
+      setAddMemberSearchTerm("");
+      setIsAddingMemberToChat(false);
+    } catch (error) {
+      console.error("Error añadiendo miembro:", error);
+    }
+  };
+
+  // Filtrar contactos que NO están ya en el chat
+  const availableContactsForChat = useMemo(() => {
+    if (!isAddingMemberToChat || !currentChatId) return [];
+    const memberIds = chatMembers.map(m => m.userId);
+    return contacts.filter(c => 
+      !memberIds.includes(c.stream_id) &&
+      (c.username || c.controller).toLowerCase().includes(addMemberSearchTerm.toLowerCase())
+    );
+  }, [contacts, chatMembers, addMemberSearchTerm, isAddingMemberToChat, currentChatId]);
 
   useEffect(() => {
     (async () => {
@@ -179,7 +220,6 @@ const SideBar: React.FC<SideBarProps> = ({ selectedChatId, onSelectChat }) => { 
       setIsCreateCommunityOpen(false);
       setNewCommunityName("");
       setNewCommunityDesc("");
-      // refresca lista
       const rows = await retrieveMyCommunities();
       setCommunities(rows);
     } catch (e) {
@@ -199,6 +239,20 @@ const SideBar: React.FC<SideBarProps> = ({ selectedChatId, onSelectChat }) => { 
       })();
     }
   }, [isCreateChatOpen]);
+
+  // Cargar contactos cuando se abre el modal de añadir miembro
+  useEffect(() => {
+    if (isAddingMemberToChat) {
+      (async () => {
+        try {
+          const data = await retrieveContacts();
+          setContacts(data);
+        } catch (err) {
+          console.error("Error cargando contactos:", err);
+        }
+      })();
+    }
+  }, [isAddingMemberToChat]);
 
   const filteredContacts = useMemo(() => 
     availableContacts
@@ -230,33 +284,26 @@ const SideBar: React.FC<SideBarProps> = ({ selectedChatId, onSelectChat }) => { 
     }
   };
 
-  // opcional: handlers para aceptar/rechazar
- // ACEPTAR petición y actualizar estado
- const handleAcceptRequest = async (userPeer: string, eventPeer: string) => {
-  try {
-    await acceptFriendRequest(userPeer, eventPeer);
-    // refrescar contactos y solicitudes pendientes
-    const updatedContacts = await retrieveContacts();
-    setContacts(updatedContacts);
-    const updatedPending = await retrieveFriendRequests();
-    setPendingRequests(updatedPending);
-  } catch (error) {
-    console.error("Error al aceptar petición:", error);
-  }
-};
+  const handleAcceptRequest = async (userPeer: string, eventPeer: string) => {
+    try {
+      await acceptFriendRequest(userPeer, eventPeer);
+      const updatedContacts = await retrieveContacts();
+      setContacts(updatedContacts);
+      const updatedPending = await retrieveFriendRequests();
+      setPendingRequests(updatedPending);
+    } catch (error) {
+      console.error("Error al aceptar petición:", error);
+    }
+  };
 
-// RECHAZAR petición y actualizar estado
-const handleRejectRequest = async (streamId: string) => {
-  try {
-    // TODO: implementar lógica de rechazo en backend
-    // Eliminamos del array local para evitar datos inconsistentes
-    setPendingRequests(prev => prev.filter(req => req.stream_id !== streamId));
-  } catch (error) {
-    console.error("Error al rechazar petición:", error);
-  }
-};
+  const handleRejectRequest = async (streamId: string) => {
+    try {
+      setPendingRequests(prev => prev.filter(req => req.stream_id !== streamId));
+    } catch (error) {
+      console.error("Error al rechazar petición:", error);
+    }
+  };
 
-  // Lógica para bloquear
   const performBlock = async () => {
     if (!confirmBlockId) return;
     try {
@@ -268,10 +315,8 @@ const handleRejectRequest = async (streamId: string) => {
   };
 
   const handleBlockRequest = async (from: string) => {
-    // TODO: implementar lógica de bloqueo
     console.log("Bloquear usuario:", from);
   };
-
 
   const handleSendFriendRequest = async (to: string) => {
     try {
@@ -282,45 +327,39 @@ const handleRejectRequest = async (streamId: string) => {
     }
   };
 
-  // Función para actualizar el valor de un miembro en una posición determinada
-const handleMemberChange = (index: number, value: string) => {
-  const newMembers = [...members];
-  newMembers[index] = value;
-  setMembers(newMembers);
-};
+  const handleMemberChange = (index: number, value: string) => {
+    const newMembers = [...members];
+    newMembers[index] = value;
+    setMembers(newMembers);
+  };
 
-// Función para agregar un nuevo input de miembro (vacío)
-const addMemberInput = () => {
-  setMembers([...members, ""]);
-};
+  const addMemberInput = () => {
+    setMembers([...members, ""]);
+  };
 
-// Función para remover un input de miembro
-const removeMemberInput = (index: number) => {
-  const newMembers = [...members];
-  newMembers.splice(index, 1);
-  setMembers(newMembers);
-};
+  const removeMemberInput = (index: number) => {
+    const newMembers = [...members];
+    newMembers.splice(index, 1);
+    setMembers(newMembers);
+  };
 
-// Actualiza la función de crear chat para usar el array "members"
-const handleCreateChat = async () => {
-  if (!chatName.trim() || selectedMembersForChat.length === 0) return;
-  try {
-    await createChat(chatName, selectedMembersForChat);
-    const myChats = await retrieveMyChats();
-    setChats(myChats);
-    setIsCreateChatOpen(false);
-    setChatName("");
-    setSelectedMembersForChat([]);
-  } catch (error) {
-    console.error("Error creando chat:", error);
-  }
-};
+  const handleCreateChat = async () => {
+    if (!chatName.trim() || selectedMembersForChat.length === 0) return;
+    try {
+      await createChat(chatName, selectedMembersForChat);
+      const myChats = await retrieveMyChats();
+      setChats(myChats);
+      setIsCreateChatOpen(false);
+      setChatName("");
+      setSelectedMembersForChat([]);
+    } catch (error) {
+      console.error("Error creando chat:", error);
+    }
+  };
 
-
-
-const openCommunityPopup = () => {
-  setCommunityMenuOpen((o) => !o);
-};
+  const openCommunityPopup = () => {
+    setCommunityMenuOpen((o) => !o);
+  };
 
   return (
     <div
@@ -527,7 +566,6 @@ const openCommunityPopup = () => {
                 key={req.stream_id}
                 className="flex justify-between items-center bg-yellow-50 dark:bg-yellow-800 p-3 rounded-lg"
               >
-                {/* Mostrar el username del solicitante */}
                 <span className="text-gray-800 dark:text-gray-200">
                   {req.username}
                 </span>
@@ -684,12 +722,10 @@ const openCommunityPopup = () => {
                 onClick={async () => {
                   try {
                     await leaveChat(confirmLeaveChatId!);
-                    // refrescar lista de chats
                     const myChats = await retrieveMyChats();
                     setChats(myChats);
-                    // si el chat que dejamos estaba seleccionado, deseleccionarlo
                     if (selectedChatId === confirmLeaveChatId) {
-                      onSelectChat("");
+                      onSelectChat(null);
                     }
                   } catch (e) {
                     console.error("Error saliendo del chat:", e);
@@ -705,30 +741,125 @@ const openCommunityPopup = () => {
         </div>
       )}
 
-      {/* Modal de miembros */}
+      {/* Modal de confirmación para eliminar miembro */}
+      {confirmRemoveMember && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.8, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 p-6 rounded-lg shadow-lg w-80"
+          >
+            <h3 className="text-lg font-bold mb-4">Confirmar eliminación</h3>
+            <p className="mb-6">
+              ¿Estás seguro de que quieres eliminar a <strong>{confirmRemoveMember.username}</strong> del chat?
+            </p>
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={() => setConfirmRemoveMember(null)}
+                className="px-4 py-2 bg-gray-300 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded hover:bg-gray-400 dark:hover:bg-gray-600 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleRemoveMember}
+                className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition"
+              >
+                Eliminar
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Modal de miembros MEJORADO */}
       {showMembersFor && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 p-6 rounded-lg shadow-lg w-80 max-h-[80vh] overflow-auto">
+          <div className="bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 p-6 rounded-lg shadow-lg w-96 max-h-[80vh] overflow-auto">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold">Miembros de {membersChat}</h3>
-              <button onClick={() => setShowMembersFor(null)}>
+              <button onClick={() => {
+                setShowMembersFor(null);
+                setIsAddingMemberToChat(false);
+                setAddMemberSearchTerm("");
+              }}>
                 <FiX />
               </button>
             </div>
-            <ul className="space-y-2">
+
+            {/* Lista de miembros con botón de eliminar */}
+            <ul className="space-y-2 mb-4">
               {chatMembers.map((m) => (
                 <li
                   key={m.userId}
-                  onClick={() => {
-                    setShowMembersFor(null);
-                    router.push(`/profile/${m.userId}`);
-                  }}
-                  className="cursor-pointer px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                  className="flex items-center justify-between px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg"
                 >
-                  {m.username}
+                  <span
+                    onClick={() => {
+                      setShowMembersFor(null);
+                      router.push(`/profile/${m.userId}`);
+                    }}
+                    className="cursor-pointer hover:text-blue-500 flex-1"
+                  >
+                    {m.username}
+                  </span>
+                  <button
+                    onClick={() => openRemoveMemberConfirmation(showMembersFor, m.userId, m.username)}
+                    className="ml-2 p-1 text-red-500 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900 rounded transition"
+                  >
+                    <FiX className="text-lg" />
+                  </button>
                 </li>
               ))}
             </ul>
+
+            {/* Botón para abrir/cerrar sección de añadir miembro */}
+            {!isAddingMemberToChat ? (
+              <button
+                onClick={() => setIsAddingMemberToChat(true)}
+                className="w-full p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition flex items-center justify-center"
+              >
+                <FiUserPlus className="mr-2" />
+                Añadir miembro
+              </button>
+            ) : (
+              <div className="border-t pt-4">
+                <h4 className="font-semibold mb-2">Añadir nuevo miembro</h4>
+                <input
+                  type="text"
+                  value={addMemberSearchTerm}
+                  onChange={e => setAddMemberSearchTerm(e.target.value)}
+                  placeholder="Buscar contacto..."
+                  className="w-full p-2 border rounded-lg mb-2 bg-gray-50 dark:bg-gray-700"
+                />
+                {addMemberSearchTerm && availableContactsForChat.length > 0 && (
+                  <ul className="max-h-40 overflow-auto border rounded-lg">
+                    {availableContactsForChat.map(c => (
+                      <li
+                        key={c.stream_id}
+                        onClick={() => handleAddMemberToExistingChat(showMembersFor, c.stream_id)}
+                        className="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer"
+                      >
+                        {c.username || c.controller}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {addMemberSearchTerm && availableContactsForChat.length === 0 && (
+                  <p className="text-sm text-gray-500">No hay contactos disponibles</p>
+                )}
+                <button
+                  onClick={() => {
+                    setIsAddingMemberToChat(false);
+                    setAddMemberSearchTerm("");
+                  }}
+                  className="mt-2 w-full p-2 bg-gray-300 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-600 transition"
+                >
+                  Cancelar
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getMe } from "@/app/ceramic/userService";
+import { refreshModels, ensureModelsLoaded } from "@/app/ceramic/orbisDB";
 
 /** ==== Validación del JSON de modelos ==== */
 type ModelKey =
@@ -26,7 +27,15 @@ const isStreamId = (v: string): boolean => /^[a-z0-9]{52,64}$/.test(v);
 
 async function checkModelsJsonExistsAndValid(): Promise<boolean> {
   try {
-    const res = await fetch("/models/whispy-stream-models.json", { cache: "no-store" });
+    const timestamp = Date.now(); // Cache-busting
+    const res = await fetch(`/models/whispy-stream-models.json?t=${timestamp}`, { 
+      cache: "no-store",
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
+    });
     if (!res.ok) return false;
     const data: any = await res.json();
     if (!data || typeof data !== "object") return false;
@@ -69,11 +78,19 @@ export function useAuthRedirect(
     let cancelled = false;
 
     const run = async () => {
-      // 1) Migraciones: comprobar JSON (y actualizar flag)
-      const cached = localStorage.getItem("orbis:migrationDone");
-      const ok = cached === "true" ? true : await checkModelsJsonExistsAndValid();
+      // 1) Migraciones: SIEMPRE comprobar JSON sin cache
+      const ok = await checkModelsJsonExistsAndValid();
 
-      try { localStorage.setItem("orbis:migrationDone", ok ? "true" : "false"); } catch {}
+      // SIEMPRE forzar recarga de models para tener los valores más recientes
+      if (ok) {
+        console.log("🔄 Recargando models desde JSON...");
+        try {
+          await refreshModels();
+          console.log("✅ Models recargados");
+        } catch (error) {
+          console.error("❌ Error recargando models:", error);
+        }
+      }
 
       if (!ok) {
         if (window.location.pathname !== "/migration") {
@@ -81,6 +98,9 @@ export function useAuthRedirect(
         }
         return;
       }
+
+      // Asegurar que los models están cargados antes de continuar
+      await ensureModelsLoaded();
 
       // 2) Checks de sesión
       const session = localStorage.getItem("orbis:session");

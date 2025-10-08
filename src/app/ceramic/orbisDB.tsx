@@ -21,23 +21,7 @@ type ModelKey =
 
 export type Models = { [K in ModelKey]: string };
 
-// ===== Defaults (fallback si aún no hay JSON en servidor) =====
-const defaultModels: Models = {
-  chat: "kjzl6hvfrbw6c9bkr3ziu8c0gfqy5rx35youb479htemtmngsyl4yofzkb9idyr",
-  community: "kjzl6hvfrbw6c8nox3bnar5sqat63plspjqnej7ad4zoov8952hfuwuxz1xcdux",
-  user: "kjzl6hvfrbw6c9x2ec6yeixhtngz548on3uv6c3faek35zljfkvpnsq8bqti34b",
-  message: "kjzl6hvfrbw6c83nduzuvldvjxmf2o08i6mfpwrtc4kyd54ipx8rbrxcgakexc1",
-  chat_membership: "kjzl6hvfrbw6c96ay1rq9lrhphbucxp50v1nt9f0qiekmuz3xisuj5dodbz7wiu",
-  relationship: "kjzl6hvfrbw6caqpydfv3pha16j2xwazbpiul8ngwhqp9k96bgmiwwd5ooja2y1",
-  post: "kjzl6hvfrbw6c8dso5240upq70fg5wcandt6mdp6hw1mcg3vsab30wu4pkcmm9o",
-  reply: "kjzl6hvfrbw6c83a87k89y2fhbvg4kfkkctmve90190wqw64avxsfnt2y7dthzo",
-  report: "kjzl6hvfrbw6c8w03cwe36w50h9nor6b1fskkbq8xto7sic3sufxgl1zubhif86",
-  friend_event: "kjzl6hvfrbw6cb47msvvz67oa9sn4qstv6xtxknuxt139t28sm9kdz5u6di67qd",
-  community_membership: "kjzl6hvfrbw6c8pfql1t5a5g9bz4j9pooblj4fiaqp9d6xp3tip4aimpn2x7mti",
-  likes: "kjzl6hvfrbw6ca183u047jwtirl8u6gdzt747nmzuhf169i1tt7yzn8dfron1ok",
-};
-
-// ===== Contexts (si los quieres dinámicos, replica patrón) =====
+// ===== Contexts =====
 const defaultContexts = {
   whispy_test: "kjzl6kcym7w8y4wk8z1hlf0rxomnejtoe1ybij5f9ohgpiwx0z2ta5wu8h5z0t6",
   whispy: "kjzl6kcym7w8y8jojqu7vvjph34wg8eophkm74veapqcpzceen0aeljxb7w3psr",
@@ -51,19 +35,30 @@ export const isDid = (v: string): boolean => /^did:pkh:eip155:\d+:(0x[0-9a-fA-F]
 export const parseToBcAddress = (did: string): string | null =>
   isDid(did) ? did.split(":").pop() || null : null;
 
-// ===== Propiedad models (mutable) + refresco en segundo plano =====
+// ===== Models como Proxy reactivo =====
+const modelsTarget: Partial<Models> = {};
 
-// 1) Objeto exportado MUTABLE (compat con orbisDB.models)
-export const models: Models = { ...defaultModels };
+// Crear un Proxy que siempre devuelva los valores actuales
+export const models = new Proxy(modelsTarget as Models, {
+  get(target, prop) {
+    const value = target[prop as keyof Models];
+    if (!value && typeof prop === 'string') {
+      console.warn(`⚠️ Model "${prop}" not loaded yet`);
+    }
+    return value;
+  },
+  set(target, prop, value) {
+    target[prop as keyof Models] = value;
+    return true;
+  }
+});
 
-// (Opcional) contexts mutables si los haces dinámicos
 export const contexts: Contexts = { ...defaultContexts };
 
-// Caché interna y TTL
-let lastFetchMs = 0;
-const TTL_MS = 60_000; // 1 min
-let refreshInFlight: Promise<void> | null = null;
-let autoTimer: ReturnType<typeof setInterval> | null = null;
+// Estado de carga
+let modelsLoaded = false;
+let loadPromise: Promise<void> | null = null;
+let autoRefreshInterval: NodeJS.Timeout | null = null;
 
 function baseUrl(): string {
   if (typeof window !== "undefined") return ""; // relativo en cliente
@@ -76,70 +71,137 @@ function baseUrl(): string {
 
 async function fetchRuntimeJSON(): Promise<Partial<Models> | null> {
   try {
-    const res = await fetch(`${baseUrl()}/models/whispy-stream-models.json`, { cache: "no-store" });
-    if (!res.ok) return null;
+    const timestamp = Date.now(); // Cache-busting
+    const res = await fetch(
+      `${baseUrl()}/models/whispy-stream-models.json?t=${timestamp}`, 
+      { 
+        cache: "no-store",
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      }
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to fetch models JSON: ${res.status} ${res.statusText}`);
+    }
     return (await res.json()) as Partial<Models>;
-  } catch {
-    return null;
+  } catch (error) {
+    console.error("Error fetching models JSON:", error);
+    throw error;
   }
 }
 
-// 2) Refresca y MUTA el objeto exportado `models`
-export async function refreshModels(force = false): Promise<void> {
-  const now = Date.now();
-  if (!force && now - lastFetchMs < TTL_MS && !refreshInFlight) return;
-
-  if (!refreshInFlight) {
-    refreshInFlight = (async () => {
-      const remote = await fetchRuntimeJSON(); // any/obj
-      if (remote && typeof remote === "object") {
-        const clean: Partial<Models> = {};
-
-        // 1) Recorremos todas las entradas del JSON remoto
-        for (const [rawKey, rawVal] of Object.entries(remote)) {
-          const k = (REMOTE_KEY_ALIASES[rawKey] || rawKey) as keyof Models; // aplica alias si existe
-          const v = typeof rawVal === "string" ? rawVal : undefined;
-
-          // 2) Solo aceptamos claves que existan en nuestro Models y con streamId válido
-          if (k in models && v && isStreamId(v)) {
-            clean[k] = v;
-          }
-        }
-
-        // 3) También permitimos que nos lleguen claves ya “correctas” desde el server
-        (Object.keys(models) as (keyof Models)[]).forEach((k) => {
-          const v = (remote as any)[k];
-          if (typeof v === "string" && isStreamId(v)) {
-            clean[k] = v;
-          }
-        });
-
-        // ✅ Mutamos el MISMO objeto exportado
-        Object.assign(models, clean);
+// Carga OBLIGATORIA desde JSON
+export async function loadModels(forceReload: boolean = false): Promise<void> {
+  if (modelsLoaded && !forceReload) return;
+  
+  if (!loadPromise || forceReload) {
+    loadPromise = (async () => {
+      const remote = await fetchRuntimeJSON();
+      
+      if (!remote || typeof remote !== "object") {
+        throw new Error("Failed to load models: JSON is empty or invalid");
       }
-      lastFetchMs = Date.now();
-    })().finally(() => {
-      refreshInFlight = null;
+
+      const clean: Partial<Models> = {};
+      const requiredKeys: (keyof Models)[] = [
+        "chat", "community", "user", "message", "chat_membership",
+        "relationship", "post", "reply", "report", "friend_event",
+        "community_membership", "likes"
+      ];
+
+      // 1) Recorremos todas las entradas del JSON remoto
+      for (const [rawKey, rawVal] of Object.entries(remote)) {
+        const k = (REMOTE_KEY_ALIASES[rawKey] || rawKey) as keyof Models;
+        const v = typeof rawVal === "string" ? rawVal : undefined;
+
+        if (v && isStreamId(v)) {
+          clean[k] = v;
+        }
+      }
+
+      // 2) Verificar que todas las claves requeridas están presentes
+      const missingKeys = requiredKeys.filter(k => !clean[k]);
+      if (missingKeys.length > 0) {
+        throw new Error(`Missing required models in JSON: ${missingKeys.join(", ")}`);
+      }
+
+      // ✅ Limpiar models anteriores y asignar nuevos valores al target del Proxy
+      for (const key in modelsTarget) {
+        delete modelsTarget[key as keyof Models];
+      }
+      Object.assign(modelsTarget, clean);
+      
+      modelsLoaded = true;
+      
+      console.log("✅ Models loaded successfully from JSON:", { ...modelsTarget });
+    })().catch((error) => {
+      loadPromise = null;
+      throw error;
     });
   }
 
-  await refreshInFlight;
+  await loadPromise;
 }
 
-
-// 3) Auto-refresh en segundo plano
-export function startModelsAutoRefresh(intervalMs = TTL_MS) {
-  // evita múltiples intervalos
-  if (autoTimer) return;
-  // refresco inmediato al arrancar
-  void refreshModels(true);
-  autoTimer = setInterval(() => { void refreshModels(false); }, Math.max(15_000, intervalMs));
+// Función para asegurar que los models están cargados antes de usarlos
+export async function ensureModelsLoaded(): Promise<void> {
+  if (!modelsLoaded) {
+    await loadModels();
+  }
 }
 
-// 4) Stop (por si necesitas parar en tests, unmount, etc.)
-export function stopModelsAutoRefresh() {
-  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+// Función para forzar recarga de models (útil para hot-reload o testing)
+export async function refreshModels(): Promise<void> {
+  modelsLoaded = false;
+  loadPromise = null;
+  await loadModels(true);
 }
 
-// 5) (Opcional) Wrapper que expone la propiedad como antes
+// Función para iniciar auto-refresh periódico de models
+export function startModelsAutoRefresh(intervalMs: number = 30000): () => void {
+  // Detener cualquier intervalo previo
+  if (autoRefreshInterval) {
+    clearInterval(autoRefreshInterval);
+  }
+
+  // Iniciar nuevo intervalo
+  autoRefreshInterval = setInterval(async () => {
+    try {
+      console.log("🔄 Auto-refreshing models...");
+      await refreshModels();
+    } catch (error) {
+      console.error("❌ Error during auto-refresh:", error);
+    }
+  }, intervalMs);
+
+  // Retornar función para detener el auto-refresh
+  return () => {
+    if (autoRefreshInterval) {
+      clearInterval(autoRefreshInterval);
+      autoRefreshInterval = null;
+      console.log("⏹️ Auto-refresh stopped");
+    }
+  };
+}
+
+// Función para detener el auto-refresh manualmente
+export function stopModelsAutoRefresh(): void {
+  if (autoRefreshInterval) {
+    clearInterval(autoRefreshInterval);
+    autoRefreshInterval = null;
+    console.log("⏹️ Auto-refresh stopped");
+  }
+}
+
+// Auto-carga al importar el módulo (solo en cliente)
+if (typeof window !== "undefined") {
+  loadModels().catch((error) => {
+    console.error("❌ CRITICAL: Failed to load models on startup:", error);
+  });
+}
+
+// Wrapper que expone la propiedad como antes
 export const orbisDB = Object.assign(db, { models, contexts });

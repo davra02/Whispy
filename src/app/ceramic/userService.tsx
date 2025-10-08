@@ -16,6 +16,8 @@ export const getMe = async (): Promise<any> => {
     if (!orbisSession) throw new Error("No hay sesión de usuario activa")
     const myDid = orbisSession.user.did
     try {
+      debugger;
+        console.log("El modelo del usuario es:", models.user);
         const result = await db
         .select()
         .from(models.user)

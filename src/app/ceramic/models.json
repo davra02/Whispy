@@ -240,8 +240,10 @@
             },
           "properties": {
             "chatId": { "$ref": "#/$defs/CeramicStreamID" },
-            "userId": { "$ref": "#/$defs/CeramicStreamID" }
+            "userId": { "$ref": "#/$defs/CeramicStreamID" },
+            "active": { "type": "boolean" }
           },
+          
           "required": ["chatId","userId"],
           "additionalProperties": false
         }

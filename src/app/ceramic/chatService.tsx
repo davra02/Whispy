@@ -21,6 +21,7 @@ export const retrieveMyChats = async () => {
         JOIN "${chatMembershipModel}" AS cm
             ON cm."chatId"   = c.stream_id
         WHERE cm."userId" = $1
+        AND cm.active = true
         AND c.stream_id != ALL($2);
 
         `,
@@ -91,7 +92,8 @@ export const createChat = async (chatName: string, members: string[]) => {
 
             const chat_membershipData = {
                 chatId: insertedChat.id,
-                userId: member
+                userId: member,
+                active: true
             };
 
             const insertedMembership = await db.insert(models.chat_membership)
@@ -120,7 +122,8 @@ export const getChatMembers = async (chatStreamId: string) => {
             FROM "${chatMembershipModel}" AS cm
             JOIN "${userModel}" AS u
                 ON u.stream_id = cm."userId"
-            WHERE cm."chatId" = $1;
+            WHERE cm."chatId" = $1
+            AND cm.active = true
             `,
             [chatStreamId]
         )
@@ -151,5 +154,75 @@ export const getChatMembersComplete = async (chatStreamId: string) => {
 
     console.log("Chat members with complete info:", rows);
     return rows;
+}
+
+export const addMember = async (chatId: string, userId: string) => {
+    try {
+        const chatMembershipData = {
+            chatId,
+            userId,
+            active: true
+        };
+
+        const existingMembership = await db
+            .select()
+            .context(contexts.whispy_test)
+            .from(models.chat_membership)
+            .where({ chatId: chatId, userId: userId })
+            .run();
+
+        if (existingMembership.rows.length > 0) {
+            const cm = existingMembership.rows[0]
+            if (cm.active) {
+                console.warn("User is already an active member of the chat");
+                return;
+            } else {
+                const updatedMembership = await db.update(cm.stream_id)
+                    .set({ active: true })
+                    .run();
+                console.log("Re-activated existing chat membership:", updatedMembership);
+                return;
+            }
+        }else {
+            const insertedMembership = await db.insert(models.chat_membership)
+                .value(chatMembershipData)
+                .context(contexts.whispy_test)
+                .run();
+            console.log("Chat membership created successfully:", insertedMembership);
+        }const insertedMembership = await db.insert(models.chat_membership)
+            .value(chatMembershipData)
+            .context(contexts.whispy_test)
+            .run();
+        console.log("Chat membership created successfully:", insertedMembership);
+
+        
+    } catch (error) {
+        console.error("Error adding member to chat:", error);
+    }
+}
+
+export const removeMember = async (chatId: string, userId: string) => {
+    try {
+        const chatMemberShip = await db
+            .select()
+            .context(contexts.whispy_test)
+            .from(models.chat_membership)
+            .where({ chatId: chatId, userId: userId, active: true })
+            .run();
+
+        if (chatMemberShip.rows.length === 0) {
+            console.warn("Membership not found for removal");
+            return;
+        }
+        const cm = chatMemberShip.rows[0];
+
+        const updatedMembership = await db.update(cm.stream_id)
+            .set({active: false})
+            .run();
+
+        console.log("Chat membership removed successfully:", updatedMembership);
+    } catch (error) {
+        console.error("Error removing member from chat:", error);
+    }
 }
 
