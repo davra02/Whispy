@@ -27,7 +27,12 @@ jest.mock('@/app/ceramic/orbisDB', () => ({
   contexts: contextsMock,
 }));
 
-// 3. Import functions
+// 🔹 Mock userService.getMe:
+jest.mock('@/app/ceramic/userService', () => ({
+  getMe: jest.fn(),
+}));
+
+import { getMe } from '@/app/ceramic/userService';
 import {
   retrieveMyChats,
   createChat,
@@ -57,26 +62,29 @@ beforeEach(() => {
 describe('chatService', () => {
 
   describe('retrieveMyChats', () => {
-    it('devuelve la lista de chats para el usuario', async () => {
-      (window.localStorage.getItem as jest.Mock).mockReturnValue(JSON.stringify({ stream_id: 'user1' }));
-      dbMock.select.mockReturnThis();
-      dbMock.context.mockReturnThis();
-      dbMock.raw.mockReturnThis();
-      dbMock.run.mockResolvedValue({
-        columns: [],
-        rows: [
-          { stream_id: 'chat1', title: 'Chat 1' },
-          { stream_id: 'chat2', title: 'Chat 2' },
-        ],
-      });
+  it('devuelve la lista de chats para el usuario', async () => {
+    // Mock de getMe para que no falle la sesión
+    (getMe as jest.Mock).mockResolvedValue({ stream_id: 'user1', username: 'test' });
 
-      const result = await retrieveMyChats();
-      expect(result).toEqual([
+    (window.localStorage.getItem as jest.Mock).mockReturnValue(JSON.stringify({ stream_id: 'user1' }));
+    dbMock.select.mockReturnThis();
+    dbMock.context.mockReturnThis();
+    dbMock.raw.mockReturnThis();
+    dbMock.run.mockResolvedValue({
+      columns: [],
+      rows: [
         { stream_id: 'chat1', title: 'Chat 1' },
         { stream_id: 'chat2', title: 'Chat 2' },
-      ]);
+      ],
     });
+
+    const result = await retrieveMyChats();
+    expect(result).toEqual([
+      { stream_id: 'chat1', title: 'Chat 1' },
+      { stream_id: 'chat2', title: 'Chat 2' },
+    ]);
   });
+});
 
   describe('createChat', () => {
     it('crea un chat y añade miembros correctamente', async () => {
