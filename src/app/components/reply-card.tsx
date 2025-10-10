@@ -15,20 +15,35 @@ const ReplyCard: React.FC<{ reply: Reply }> = ({ reply }) => {
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
   const [expanded, setExpanded] = useState(false);
-  const [isReportOpen, setIsReportOpen] = useState(false);    // ← estado modal
-  const [reportReason, setReportReason] = useState("");       // ← estado razón
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState("");
 
-
-  useEffect(() => {
-    async function fetchLikes() {
+  // Función para cargar datos de likes
+  const loadReplyData = async () => {
+    try {
       const [initialLiked, initialCount] = await Promise.all([
         checkLike(reply.stream_id),
         getNumberOfLikes(reply.stream_id),
       ]);
       setLiked(!!initialLiked);
       setLikeCount(initialCount);
+    } catch (error) {
+      console.error("Error cargando datos de la respuesta:", error);
     }
-    fetchLikes();
+  };
+
+  // Cargar datos inicialmente y configurar auto-refresh
+  useEffect(() => {
+    // Carga inicial
+    loadReplyData();
+
+    // Configurar intervalo de 5 segundos
+    const interval = setInterval(() => {
+      loadReplyData();
+    }, 5000);
+
+    // Limpiar intervalo al desmontar
+    return () => clearInterval(interval);
   }, [reply.stream_id]);
 
   const handleLike = async () => {
@@ -41,6 +56,8 @@ const ReplyCard: React.FC<{ reply: Reply }> = ({ reply }) => {
       setLiked(true);
       setLikeCount((c) => c + 1);
     }
+    // Recargar inmediatamente después de dar/quitar like
+    await loadReplyData();
   };
 
   const handleReport = () => {
@@ -80,18 +97,21 @@ const ReplyCard: React.FC<{ reply: Reply }> = ({ reply }) => {
       {/* Footer Actions */}
       <div className="px-4 pb-4 flex items-center">
         <button onClick={handleLike} className="flex items-center focus:outline-none">
-          <FiHeart className={liked ? "text-red-500" : "text-transparent"} size={18} />
+          <FiHeart 
+            className={liked ? "text-red-500 fill-current" : "text-gray-500 dark:text-gray-400"} 
+            size={18} 
+          />
           <span className="ml-1 text-sm text-gray-700 dark:text-gray-300">{likeCount}</span>
         </button>
         <button
-              onClick={handleReport}
-              className="flex items-center ml-4 focus:outline-none"
-            >
-              <FiFlag
-                className="text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400"
-                size={18}
-              />
-            </button>
+          onClick={handleReport}
+          className="flex items-center ml-4 focus:outline-none"
+        >
+          <FiFlag
+            className="text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400"
+            size={18}
+          />
+        </button>
       </div>
       {/* Report Modal */}
       {isReportOpen && (
@@ -127,7 +147,6 @@ const ReplyCard: React.FC<{ reply: Reply }> = ({ reply }) => {
         </div>
       )}
     </div>
-    
   );
 };
 

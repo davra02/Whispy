@@ -24,8 +24,9 @@ const PostCard: React.FC<{ post: Post }> = ({ post }) => {
   const [reportReason, setReportReason] = useState("");         
   const router = useRouter();
 
-  useEffect(() => {
-    async function fetchData() {
+  // Función para cargar datos (likes, replies, estado de like)
+  const loadPostData = async () => {
+    try {
       const [initialLiked, initialLikes, initialReplies] = await Promise.all([
         checkLike(post.stream_id),
         getNumberOfLikes(post.stream_id),
@@ -34,8 +35,23 @@ const PostCard: React.FC<{ post: Post }> = ({ post }) => {
       setLiked(!!initialLiked);
       setLikeCount(initialLikes);
       setReplyCount(initialReplies);
+    } catch (error) {
+      console.error("Error cargando datos del post:", error);
     }
-    fetchData();
+  };
+
+  // Cargar datos inicialmente y configurar auto-refresh
+  useEffect(() => {
+    // Carga inicial
+    loadPostData();
+
+    // Configurar intervalo de 5 segundos
+    const interval = setInterval(() => {
+      loadPostData();
+    }, 5000);
+
+    // Limpiar intervalo al desmontar
+    return () => clearInterval(interval);
   }, [post.stream_id]);
 
   const handleLike = async () => {
@@ -48,6 +64,8 @@ const PostCard: React.FC<{ post: Post }> = ({ post }) => {
       setLiked(true);
       setLikeCount((count) => count + 1);
     }
+    // Recargar inmediatamente después de dar/quitar like
+    await loadPostData();
   };
 
   const handleReport = () => {
@@ -104,7 +122,7 @@ const PostCard: React.FC<{ post: Post }> = ({ post }) => {
             className="flex items-center focus:outline-none"
           >
             <FiHeart
-              className={liked ? "text-red-500" : "text-transparent"}
+              className={liked ? "text-red-500 fill-current" : "text-gray-500 dark:text-gray-400"}
               size={20}
             />
             <span className="ml-1 text-sm text-gray-700 dark:text-gray-300">

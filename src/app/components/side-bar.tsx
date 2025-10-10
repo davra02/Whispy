@@ -558,12 +558,12 @@ const SideBar: React.FC<SideBarProps> = ({ selectedChatId, onSelectChat }) => {
           )}
         </div>
 
-        {isPendingOpen && (
+                {isPendingOpen && (
           <ul className="mt-2 space-y-2">
           {pendingRequests.length > 0 ? (
             pendingRequests.map((req) => (
               <li
-                key={req.stream_id}
+                key={req.username}
                 className="flex justify-between items-center bg-yellow-50 dark:bg-yellow-800 p-3 rounded-lg"
               >
                 <span className="text-gray-800 dark:text-gray-200">
