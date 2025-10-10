@@ -32,10 +32,40 @@ const CommunityPage: React.FC = () => {
 
   const quillRef = useRef<any>(null);
 
+  // Función para cargar datos de la comunidad y posts
+  const loadCommunityData = async () => {
+    try {
+      const communityData = await getCommunityById(controller);
+      setCommunity(communityData);
+  
+      const rawPosts = await retrieveCommunityPosts(controller);
+      const postsConUser = await Promise.all(
+        rawPosts.map(async post => {
+          const bcAddress = parseToBcAddress(post.controller);
+          let username = "Desconocido";
 
+          if (bcAddress) {
+            const user = await getUserByBcAdress(bcAddress);
+            username = user.username;
+          }
+
+          return { ...post, username };
+        })
+      );
+      setPosts(postsConUser);
+    } catch (error) {
+      console.error("Error cargando datos de la comunidad:", error);
+    }
+  };
+
+  // Cargar estado de unión
   useEffect(() => {
     (async () => {
-      setJoined(await checkJoined(controller));
+      try {
+        setJoined(await checkJoined(controller));
+      } catch (error) {
+        console.error("Error verificando estado de unión:", error);
+      }
     })();
   }, [controller]);
 
@@ -49,28 +79,19 @@ const CommunityPage: React.FC = () => {
     }
   };
 
+  // Cargar datos inicialmente y configurar auto-refresh
   useEffect(() => {
-    (async () => {
-      const communityData = await getCommunityById(controller);
-      setCommunity(communityData);
-  
-      const rawPosts = await retrieveCommunityPosts(controller);
-      const postsConUser = await Promise.all(
-        rawPosts.map(async post => {
-          // parseToBcAddress puede devolver null, así que lo chequeamos
-          const bcAddress = parseToBcAddress(post.controller);
-          let username = "Desconocido";
+    // Carga inicial
+    loadCommunityData();
 
-          if (bcAddress) {
-            const user = await getUserByBcAdress(bcAddress);
-            username = user.username;
-          }
+    // Configurar intervalo de 5 segundos
+    const interval = setInterval(() => {
+      console.log("🔄 Recargando comunidad y posts...");
+      loadCommunityData();
+    }, 5000);
 
-          return { ...post, username };
-        })
-      );
-      setPosts(postsConUser);
-    })();
+    // Limpiar intervalo al desmontar
+    return () => clearInterval(interval);
   }, [controller]);
 
   useEffect(() => {
@@ -86,9 +107,10 @@ const CommunityPage: React.FC = () => {
   const handleSubmit = async () => {
     if (!content.trim()) return;
     await createPost(content, controller, title);
-    const p = await retrieveCommunityPosts(controller);
-    setPosts(p);
+    // Recargar inmediatamente después de publicar
+    await loadCommunityData();
     setContent("");
+    setTitle("");
     setEditorOpen(false);
     console.log("Publicar:", content);
   };
@@ -96,33 +118,43 @@ const CommunityPage: React.FC = () => {
   return (
     <div className="relative min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Banner */}
-      <div
-        className={`fixed top-0 left-0 right-0 bg-white dark:bg-gray-800 shadow-md transition-transform duration-300 z-10 ${
-          showBanner ? "translate-y-0" : "-translate-y-full"
+<div
+  className={`fixed top-0 left-0 right-0 bg-white dark:bg-gray-800 shadow-md transition-transform duration-300 z-10 ${
+    showBanner ? "translate-y-0" : "-translate-y-full"
+  }`}
+>
+  <div className="flex items-center justify-between p-4">
+    <button
+      onClick={() => router.push("/")}
+      className="p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition"
+    >
+      <FiArrowLeft className="text-xl" />
+    </button>
+    
+    {/* Contenedor central con título y descripción */}
+    <div className="flex-1 text-center px-4">
+      <h1 className="text-lg font-bold truncate">
+        {community?.name || "Cargando..."}
+      </h1>
+      {community?.description && (
+        <p className="text-sm text-gray-600 dark:text-gray-400 truncate mt-1">
+          {community.description}
+        </p>
+      )}
+    </div>
+    
+    <button
+      onClick={handleToggleJoin}
+      className={`px-4 py-2 rounded-lg transition flex-shrink-0
+        ${joined 
+          ? "bg-red-500 hover:bg-red-600 text-white" 
+          : "bg-blue-500 hover:bg-blue-600 text-white"
         }`}
-      >
-        <div className="flex items-center justify-between p-4">
-          <button
-            onClick={() => router.push("/")}
-            className="p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition"
-          >
-            <FiArrowLeft className="text-xl" />
-          </button>
-          <h1 className="flex-1 text-center text-lg font-bold truncate">
-            {community?.name || "Cargando..."}
-          </h1>
-          <button
-            onClick={handleToggleJoin}              // ← usamos el toggle
-            className={`px-4 py-2 rounded-lg transition 
-              ${joined 
-                ? "bg-red-500 hover:bg-red-600 text-white" 
-                : "bg-blue-500 hover:bg-blue-600 text-white"
-              }`}
-          >
-            {joined ? "Salir" : "Unirme"}       
-          </button>
-        </div>
-      </div>
+    >
+      {joined ? "Salir" : "Unirme"}       
+    </button>
+  </div>
+</div>
 
       {/* Posts */}
       <div className="pt-20 px-4 space-y-4 pb-32">
@@ -138,7 +170,7 @@ const CommunityPage: React.FC = () => {
       </div>
 
       {/* Floating Add Button */}
-      <div className="fixed bottom-6 right-6">  {/* ← moved from left-6 to right-6 */}
+      <div className="fixed bottom-6 right-6">
         <motion.button
           onClick={() => setEditorOpen(o => !o)}
           className="w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center shadow-lg"
@@ -159,8 +191,8 @@ const CommunityPage: React.FC = () => {
         p-6 bg-white dark:bg-gray-800
         rounded-2xl shadow-2xl z-20
 
-        flex flex-col         /* ① */
-        min-h-0               /* ② */
+        flex flex-col
+        min-h-0
       "
       initial={{ opacity: 0, y: 50 }}
       animate={{ opacity: 1, y: 0 }}
@@ -187,15 +219,12 @@ const CommunityPage: React.FC = () => {
               [{ list: "ordered" }, { list: "bullet" }],
               ["link", "image"],
             ],
-            // handlers: {
-            //   image: imageHandler,     // ← aquí inyectas tu handler
-            // },
           },
         }}
         className="
-          flex flex-col         /* hace que toolbar + container sean hijos flexibles */
-          flex-1                /* ocupa todo el espacio disponible */
-          min-h-0               /* permite que encoger funcione */
+          flex flex-col
+          flex-1
+          min-h-0
           bg-white dark:bg-gray-800
           text-gray-900 dark:text-gray-100
           mb-4
@@ -225,7 +254,6 @@ const CommunityPage: React.FC = () => {
           color: #f3f4f6;
         }
 
-        /* ③ que el contenedor interno respete el flex y haga scroll interno */
         .ql-container {
           flex: 1 !important;
           display: flex !important;

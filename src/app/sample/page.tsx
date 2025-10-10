@@ -3,7 +3,9 @@ import { use, useEffect, useState } from "react";
 import { contexts, db, models} from "../ceramic/orbisDB";
 import { OrbisConnectResult } from "@useorbis/db-sdk";
 import { tr } from "framer-motion/client";
-import * as jsonModels from "../ceramic/models.json";
+ 
+import * as jsonModelsRaw from "../ceramic/models.json";
+const jsonModels: Record<string, any> = jsonModelsRaw;
 import { getMe } from "../ceramic/userService";
 import { retrieveMessages } from "../ceramic/messageService";
 

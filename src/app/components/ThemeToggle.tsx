@@ -6,11 +6,19 @@ const ThemeToggle = () => {
   useEffect(() => {
     // Detectar y aplicar el tema almacenado en el localStorage
     const storedTheme = localStorage.getItem('theme') as 'light' | 'dark';
+    
     if (storedTheme) {
       setTheme(storedTheme);
-      document.documentElement.classList.add(storedTheme);
+      // Limpiar clases existentes y aplicar la correcta
+      document.documentElement.classList.remove('light', 'dark');
+      if (storedTheme === 'dark') {
+        document.documentElement.classList.add('dark');
+      }
     } else {
-      document.documentElement.classList.add('light');
+      // Si no hay tema guardado, usar light por defecto
+      setTheme('light');
+      document.documentElement.classList.remove('light', 'dark');
+      // No añadir 'light' porque Tailwind usa 'dark' como modificador
     }
   }, []);
 
@@ -19,8 +27,10 @@ const ThemeToggle = () => {
     setTheme(newTheme);
 
     // Actualizar el tema en el DOM
-    document.documentElement.classList.remove(theme);
-    document.documentElement.classList.add(newTheme);
+    document.documentElement.classList.remove('light', 'dark');
+    if (newTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    }
 
     // Guardar el tema en el localStorage
     localStorage.setItem('theme', newTheme);

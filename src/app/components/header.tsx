@@ -53,13 +53,13 @@ const Header: React.FC = () => {
 
   return (
     <header className="bg-gray-200 dark:bg-gray-800 text-gray-800 dark:text-gray-200 b-2 shadow-md flex items-center relative">
-      <div className="flex items-center">
-        <img src="Whispy.png" alt="Logo" className="h-20 w-20" />
+      <div className="flex items-center mr-20">
+        <img src="Whispy.png" alt="Logo" className="m-3 h-10" />
         <h1 className="text-xl font-bold ml-2">Whispy</h1>
       </div>
 
       {/* Buscador en medio */}
-      <div className="flex-1 mx-4 relative">
+      <div className="flex-1 mx-4 relative ml-10">
         <input
           type="text"
           value={searchTerm}

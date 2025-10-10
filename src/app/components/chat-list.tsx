@@ -11,9 +11,15 @@ interface Message {
 
 interface ChatListProps {
   messages: Message[];
+  shouldScrollToBottom?: boolean;
+  onScrollComplete?: () => void;
 }
 
-const ChatList: React.FC<ChatListProps> = ({ messages }) => {
+const ChatList: React.FC<ChatListProps> = ({ 
+  messages, 
+  shouldScrollToBottom = false,
+  onScrollComplete 
+}) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [myStreamId, setMyStreamId] = useState<string | null>(null);
   const [usernames, setUsernames] = useState<Record<string, string>>({});
@@ -24,11 +30,13 @@ const ChatList: React.FC<ChatListProps> = ({ messages }) => {
     setMyStreamId(me);
   }, []);
 
+  // Solo hacer scroll cuando shouldScrollToBottom sea true
   useEffect(() => {
-    if (containerRef.current) {
+    if (shouldScrollToBottom && containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
+      onScrollComplete?.(); // Notificar que se completó el scroll
     }
-  }, [messages]);
+  }, [messages, shouldScrollToBottom, onScrollComplete]);
 
   const sorted = [...messages].sort(
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()

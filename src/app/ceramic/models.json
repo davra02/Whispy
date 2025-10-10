@@ -240,8 +240,10 @@
             },
           "properties": {
             "chatId": { "$ref": "#/$defs/CeramicStreamID" },
-            "userId": { "$ref": "#/$defs/CeramicStreamID" }
+            "userId": { "$ref": "#/$defs/CeramicStreamID" },
+            "active": { "type": "boolean" }
           },
+          
           "required": ["chatId","userId"],
           "additionalProperties": false
         }
@@ -306,7 +308,7 @@
             "EventType": {
                 "type": "string",
                 "title": "EventType",
-                "enum": ["REQUEST", "ACCEPT", "REJECT", "BLOCK", "UNBLOCK"]
+                "enum": ["REQUEST", "ACCEPT", "REJECT", "BLOCK", "UNBLOCK", "DELETE"]
             }
             },
             "properties": {
@@ -396,10 +398,18 @@
                 "bio": { "type": "string" },
                 "profilePicture": { "type": "string" },
                 "isPrivate": { "type": "boolean" },
-                "publicKey": { "type": "string" }
+                "publicKey": { "type": "string" },
+                "leftChats": {
+                    "type": "array",
+                    "items": { "$ref": "#/$defs/CeramicStreamID" }
+                },
+                "blockedUsers": {
+                    "type": "array",
+                    "items": { "$ref": "#/$defs/CeramicStreamID" }
+                }
             },
             "required": ["username", "isPrivate", "publicKey"],
-            "additionalProperties": true
+            "additionalProperties": false
         }
     }
 

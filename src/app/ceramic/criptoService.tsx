@@ -37,7 +37,7 @@ function getRandomBytes(length: number): Uint8Array {
   return window.crypto.getRandomValues(new Uint8Array(length));
 }
 
-async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
+async function deriveKey(password: string, salt: any): Promise<CryptoKey> {
   const keyMaterial = await window.crypto.subtle.importKey(
     "raw",
     encoder.encode(password),
@@ -64,7 +64,7 @@ export async function encryptWithPassword(
   password: string
 ): Promise<string> {
   const salt = getRandomBytes(16);
-  const iv = getRandomBytes(12);
+  const iv : any= getRandomBytes(12);
   const key = await deriveKey(password, salt);
 
   const ciphertext = await window.crypto.subtle.encrypt(

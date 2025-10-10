@@ -70,7 +70,7 @@ export default function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             disabled={loading}
           />
-          …
+        
         <div className="mt-2 text-right">
           <span className="text-sm text-gray-500 dark:text-gray-400">
             ¿Has olvidado la contraseña? Recupera el acceso con tu clave privada{" "}
@@ -83,7 +83,7 @@ export default function LoginPage() {
             .
           </span>
         </div>
-…
+
         </div>
 
         {error && (

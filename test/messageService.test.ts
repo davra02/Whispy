@@ -103,7 +103,7 @@ describe('messageService', () => {
       dbMock.context.mockReturnThis();
       dbMock.run.mockResolvedValue({});
 
-      await sendMessage('hola', 'chatId', 'author', { kty: 'priv' } as any);
+      await sendMessage('hola', 'chatId', 'author', { kty: 'priv' } as any, "text");
 
       // Debe enviar dos mensajes (uno por miembro)
       expect(encryptMessage).toHaveBeenCalledTimes(2);
@@ -122,7 +122,7 @@ describe('messageService', () => {
 
     it('loggea el error si ocurre una excepción', async () => {
       dbMock.getConnectedUser.mockRejectedValue(new Error('fail'));
-      await sendMessage('failmsg', 'failchat', 'author', { kty: 'priv' } as any);
+      await sendMessage('failmsg', 'failchat', 'author', { kty: 'priv' } as any, "text");
       expect(console.error).toHaveBeenCalledWith("Error sending message:", expect.any(Error));
     });
   });
