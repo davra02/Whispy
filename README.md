@@ -39,7 +39,7 @@ Open [http://localhost:3000](http://localhost:3000) to see the app.
 
 The full technical report (111 pages) covering architecture, 
 design decisions, implementation and evaluation is available 
-upon request.
+[here](https://github.com/Whispy-Decentralized-chat-application/Whispy-Client/blob/main/whispy_memorandum.pdf).
 
 ## Key Features
 
