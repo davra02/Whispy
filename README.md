@@ -9,22 +9,16 @@ University of Seville (2025/26).
 
 ## Overview
 
-Traditional messaging apps depend on centralised architectures controlled 
-by third parties, creating risks of data exploitation, censorship, and 
-loss of user sovereignty. Whispy addresses this by combining:
+Whispy is a decentralised messaging platform built as a Final Degree Project in Software Engineering at the University of Seville (2025/26). It explores how encrypted messaging, community management, and user identity can be designed without relying on traditional centralised servers.
 
-- **Decentralised storage** via Ceramic Network, OrbisDB and IPFS
-- **End-to-end encryption (E2EE)** for message confidentiality
-- **Blockchain anchoring** for data integrity and identity (DIDs)
-- **P2P architecture** with no central server dependency
+The project was implemented using a decentralised data stack centered around Ceramic, OrbisDB and IPFS, together with Ethereum-based identity and end-to-end encryption. Although parts of this ecosystem have evolved significantly since the project was developed, Whispy remains a strong technical exploration of privacy-preserving, user-owned communication systems.
 
 ## Tech Stack
 
 - **Frontend:** Next.js, TypeScript
-- **Decentralised storage:** Ceramic Network, OrbisDB, IPFS
-- **Blockchain:** Ethereum, Solidity (smart contracts)
-- **Encryption:** End-to-end encryption (E2EE)
-- **Identity:** Decentralised Identifiers (DIDs)
+- **Distributed data layer:** Ceramic, OrbisDB, IPFS
+- **Identity and anchoring:** Ethereum, DIDs, Solidity
+- **Security:** End-to-end encryption (E2EE)
 
 ## Getting Started
 
