@@ -1,12 +1,5 @@
 # Whispy — Decentralised Messaging Platform
 
-Whispy is a decentralised social messaging platform that allows users to 
-send and receive messages and manage communities without relying on 
-centralised servers for data storage.
-
-Built as a Final Degree Project in Software Engineering at the 
-University of Seville (2025/26).
-
 ## Overview
 
 Whispy is a decentralised messaging platform built as a Final Degree Project in Software Engineering at the University of Seville (2025/26). It explores how encrypted messaging, community management, and user identity can be designed without relying on traditional centralised servers.
